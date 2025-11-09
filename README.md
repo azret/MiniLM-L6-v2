@@ -26,7 +26,7 @@ Make sure you have Python 3.12 or higher installed. The model itself is lightwei
 2. **Get the weights**:
 
    ```bash
-   # This will download the necessary weights from Hugging Face and create a new MiniLM-L6-v2.ckpt.
+   # This will download the necessary weights from Hugging Face 🤗 and create a new MiniLM-L6-v2.ckpt.
    python MiniLM-L6-v2.py #
 
    > python = 3.12.3 (tags/v3.12.3:f6650f9, Apr  9 2024, 14:05:25) [MSC v.1938 64 bit (AMD64)]
