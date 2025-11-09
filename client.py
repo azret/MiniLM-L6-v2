@@ -1,7 +1,7 @@
-import sys, os, json, requests, time, jwt
+import sys, os, json, requests, time, jwt, numpy
 
 BASE_URL = "http://127.0.0.1:8000"
-# BASE_URL = "https://minilm-l6-v2-fsdhaggedqfrddhg.eastus-01.azurewebsites.net"
+BASE_URL = "https://minilm-l6-v2-fsdhaggedqfrddhg.eastus-01.azurewebsites.net"
 # BASE_URL = "https://api.openai.com"
 
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
@@ -89,7 +89,7 @@ def do_one_request(token: str, idx: int) -> float:
     resp = requests.post(url, json=payload, headers=headers)
     data = resp.json()
     elapsed = time.time() - t0
-    return (idx, resp.status_code, elapsed, len(data["data"]))
+    return (idx, resp.status_code, elapsed, len(data["data"]), data["data"])
 
 def loadtest():
     token = issue_token(subject="client.py")
@@ -103,8 +103,29 @@ def loadtest():
             for i in range(total_requests)
         ]
         for fut in as_completed(futures):
-            idx, status, elapsed, len_ = fut.result()
+            idx, status, elapsed, len_, embeddings = fut.result()
             print(f"[{idx:03d}] status={status} latency={elapsed*1000:.2f}ms batch={len_}")
 
+def test():
+    token = issue_token(subject="client.py")
+    _, _, _, len_, data = do_one_request(token, 0)
+    from sentence_transformers import SentenceTransformer
+    _SentenceTransformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    sentence_embeddings = _SentenceTransformer.encode(sentences)
+    assert len_ == len(sentences)
+    assert len_ == len(data)
+    assert len_ == len(sentence_embeddings)
+    for i in range(len_):
+        sentence_embedding0 = numpy.array(data[i]["embedding"])
+        sentence_embedding1 = sentence_embeddings[i]
+        assert sentence_embedding0.shape == sentence_embedding1.shape
+        assert numpy.allclose(
+            sentence_embedding0,
+            sentence_embedding1,
+            atol=1e-5
+        )
+    print("Success!")
+
 if __name__ == "__main__":
-    loadtest()
+    # loadtest()
+    test()

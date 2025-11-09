@@ -88,6 +88,8 @@ python -m uvicorn runserver:app --host 0.0.0.0 --port 8000 --reload
 
 The API is compatible with [OpenAI's embedding endpoint](https://platform.openai.com/docs/guides/embeddings).
 
+**Request:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/embeddings \
   -H "Content-Type: application/json" \
@@ -96,6 +98,8 @@ curl -X POST http://localhost:8000/v1/embeddings \
     "input": "The quick brown fox"
   }'
 ```
+
+**Response:**
 
 ```json
 {
@@ -121,7 +125,39 @@ curl -X POST http://localhost:8000/v1/embeddings \
 }
 ```
 
-## Deployment on Azure (CPU)
+## Deployment
+
+**Environment Variables:**
+
+- Device selection:
+  - `auto`: Automatically select GPU if available, otherwise use CPU.
+  - `cpu`: Force CPU usage.
+  - `gpu`: Force GPU usage.
+
+```
+DEVICE=auto|cpu|gpu
+```
+
+- JWT Secret Key:
+    All requests to the API must include a valid JWT token signed with this secret key.
+
+```
+JWT_SECRET=<your_secret_key>
+```
+
+**Files to deploy:**
+
+- `modeling.py`
+- `MiniLM-L6-v2.py`
+- `MiniLM-L6-v2.ckpt`
+- `runserver.py`
+- `requirements.txt`
+
+## Deployment on  https://lambda.ai/
+
+## Deployment on Azure
+
+### Log of the steps taken to deploy on Azure App Service
 
 ***11/9/2025***
 
@@ -195,12 +231,6 @@ The autual runserver.py output:
 ***11/8/2025***
 
 This is the painful process. It might take a few attempts. The following steps worked for me.
-
-**Set Environment Variables:**
-
-```
-JWT_SECRET=<your_secret_key>
-```
 
 This one is probably not needed anymore.
 ```
