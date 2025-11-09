@@ -1,6 +1,7 @@
 import os, json, requests, time, jwt
 
 BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "https://minilm-l6-v2-fsdhaggedqfrddhg.eastus-01.azurewebsites.net"
 
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "{CHANGEME}")
 JWT_ALG = os.getenv("APP_JWT_ALG", "HS256")

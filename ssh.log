@@ -1,0 +1,53 @@
+   _____                               
+  /  _  \ __________ _________   ____  
+ /  /_\  \\___   /  |  \_  __ \_/ __ \ 
+/    |    \/    /|  |  /|  | \/\  ___/ 
+\____|__  /_____ \____/ |__|    \___  >
+        \/      \/                  \/ 
+A P P   S E R V I C E   O N   L I N U X
+
+Documentation    : http://aka.ms/webapp-linux
+Python quickstart: https://aka.ms/python-qs
+Python version   : 3.12.12
+
+Note: Any data outside '/home' is not persisted
+root@bec7b59d1ee3:/home/site/wwwroot# python -m antenv /home/site/wwwroot/antenv
+/opt/python/3/bin/python: No module named antenv
+root@bec7b59d1ee3:/home/site/wwwroot# python -m venv /home/site/wwwroot/antenv
+root@bec7b59d1ee3:/home/site/wwwroot# ls
+antenv     GPT.py             MiniLM-L6-v2.ckpt  modeling.py    __pycache__  requirements.txt  web.config
+client.py  hostingstart.html  MiniLM-L6-v2.py    output.tar.gz  README.md    runserver.py
+root@bec7b59d1ee3:/home/site/wwwroot# source /home/site/wwwroot/antenv/bin/activate
+((antenv) ) root@bec7b59d1ee3:/home/site/wwwroot# ls
+antenv     GPT.py             MiniLM-L6-v2.ckpt  modeling.py    __pycache__  requirements.txt  web.config
+client.py  hostingstart.html  MiniLM-L6-v2.py    output.tar.gz  README.md    runserver.py
+((antenv) ) root@bec7b59d1ee3:/home/site/wwwroot# pip install -r requirements.txt
+Collecting torch (from -r requirements.txt (line 1))
+  Downloading torch-2.9.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (30 kB)
+Collecting transformers (from -r requirements.txt (line 2))
+  Downloading transformers-4.57.1-py3-none-any.whl.metadata (43 kB)
+....
+....
+....
+Downloading torch-2.9.0-cp312-cp312-manylinux_2_28_x86_64.whl (899.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 899.7/899.7 MB 15.9 MB/s eta 0:00:00
+Downloading nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_x86_64.whl (594.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 594.3/594.3 MB 8.7 MB/s eta 0:00:00
+Downloading nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (10.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.2/10.2 MB 56.6 MB/s eta 0:00:00
+....
+Downloading nvidia_nvshmem_cu12-3.3.20-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (124.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 124.7/124.7 MB 38.8 MB/s eta 0:00:00
+Installing collected packages: nvidia-cusparselt-cu12, mpmath, urllib3, typing-extensions, triton, tqdm, sympy, sniffio, setuptools, safetensors,
+regex, pyyaml, PyJWT, packaging, nvidia-nvtx-cu12, nvidia-nvshmem-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-curand-cu12, nvidia-cufile-cu12,
+nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, numpy, networkx, MarkupSafe, idna, hf-xet, h11, fsspec,
+filelock, click, charset_normalizer, certifi, annotated-types, annotated-doc, uvicorn, typing-inspection, requests, pydantic-core, nvidia-cusparse-cu12,
+nvidia-cufft-cu12, nvidia-cudnn-cu12, jinja2, gunicorn, anyio, starlette, pydantic, nvidia-cusolver-cu12, huggingface-hub, 
+torch, tokenizers, fastapi, transformers
+....
+....
+....
+[notice] A new release of pip is available: 25.0.1 -> 25.3
+[notice] To update, run: pip install --upgrade pip
+((antenv) ) root@e6275922b712:/home/site/wwwroot# 
+((antenv) ) root@e6275922b712:/home/site/wwwroot# 

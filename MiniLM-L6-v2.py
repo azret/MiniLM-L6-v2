@@ -1,6 +1,6 @@
 import math, os, sys, time
 
-import numpy, torch, tiktoken
+import numpy, torch
 
 from modeling import _Model, MultiHeadSelfAttention, MLP
 

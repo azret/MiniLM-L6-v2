@@ -6,15 +6,15 @@ This repository provides a self-contained implementation of the [**all-MiniLM-L6
 
 ## Dependencies
 
-- `torch` Core dependency
+- `torch` **Required**
 
-- `transformers` For downloading weights, tokenization and tests. **Only the tokenizer is used**.
+- `transformers` For downloading weights, tokenization and tests. **Only the tokenizer is used at the moment**.
 
 - `sentence-transformers` For tests. **Not used during inference**.
 
 ## Installation
 
-Make sure you have Python 3.12 or higher installed. The model itself is lightweight and dependency-free and can be easily deployed on local machines or cloud environments.
+Make sure you have Python 3.12 or higher.
 
 1. **Install the requirements**:
 
@@ -74,7 +74,7 @@ Make sure you have Python 3.12 or higher installed. The model itself is lightwei
    Press any key to continue . . .
    ```
 
-## Deployment
+## Run the API server
 
 ```bash
 python -m uvicorn runserver:app --host 0.0.0.0 --port 8000 --reload
@@ -82,7 +82,7 @@ python -m uvicorn runserver:app --host 0.0.0.0 --port 8000 --reload
 
 ## API
 
-The API is compatible with OpenAI's embedding endpoint.
+The API is compatible with [OpenAI's embedding endpoint](https://platform.openai.com/docs/guides/embeddings).
 
 ```bash
 curl -X POST http://localhost:8000/v1/embeddings \
@@ -117,24 +117,127 @@ curl -X POST http://localhost:8000/v1/embeddings \
 }
 ```
 
-## Azure
+## Deployment on Azure
 
-TODO: Add Azure deployment instructions. This is the most complicated part. Azure is not an easy thing to deploy to.
+***11/9/2025***
 
-Environment Variable:
+It appears that all the packages are not persisted after a restart. If you restart the App Service you might need to SSH into the machine again and re-install the packages.
 
+Create a python virtual environment, install the packages there and modify the startup command to use the virtual environment's python executable.
+
+Azure should persist the virtual environment across restarts if they are in the **/home** directory.
+
+<span style='color:red'>**IMPORTANT**</span>: **Clear the existing startup command**
+
+- **Settings > Configuration > Stack settings > Startup command**
+- **Overview > Restart the App Service**
+
+**Create the virtual environment and install the packages:**
+
+```bash
+python -m venv /home/site/wwwroot/antenv
+source /home/site/wwwroot/antenv/bin/activate
+pip install -r requirements.txt
 ```
-SCM_DO_BUILD_DURING_DEPLOYMENT=true
-```
 
-Startup Command:
+**Settings > Configuration > Stack settings > Startup command:**
 
 ```bash
 python -m uvicorn runserver:app --host 0.0.0.0 --port 8000
 ```
 
-Deployment Center -> Publish Files:
+And it should start correctly.
 
+```
+Connected!
+2025-11-09T06:14:58.9685996Z    _____
+2025-11-09T06:14:58.9687912Z   /  _  \ __________ _________   ____
+2025-11-09T06:14:58.9687957Z  /  /_\  \\___   /  |  \_  __ \_/ __ \
+2025-11-09T06:14:58.9687985Z /    |    \/    /|  |  /|  | \/\  ___/
+2025-11-09T06:14:58.9688073Z \____|__  /_____ \____/ |__|    \___  >
+2025-11-09T06:14:58.9688102Z         \/      \/                  \/
+2025-11-09T06:14:58.9688125Z A P P   S E R V I C E   O N   L I N U X
+2025-11-09T06:14:58.9688146Z
+2025-11-09T06:14:58.9688173Z Documentation    : http://aka.ms/webapp-linux
+2025-11-09T06:14:58.9688198Z Python quickstart: https://aka.ms/python-qs
+2025-11-09T06:14:58.968822Z Python version   : 3.12.12
+2025-11-09T06:14:58.9688312Z
+2025-11-09T06:14:58.9688335Z Note: Any data outside '/home' is not persisted
+2025-11-09T06:15:01.8924019Z Starting OpenBSD Secure Shell server: sshd.
+2025-11-09T06:15:01.9423327Z WEBSITES_INCLUDE_CLOUD_CERTS is not set to true.
 
-Upload the entire repository as a ZIP file and deploy it to Azure App Service.
+This is the important line:
 
+**2025-11-09T06:15:27.9817917Z Site's appCommandLine: python -m uvicorn runserver:app --host 0.0.0.0 --port 8000**
+
+The autual runserver.py output:
+
+2025-11-09T06:16:16.6672107Z INFO:     Started server process [2108]
+2025-11-09T06:16:16.669466Z INFO:     Waiting for application startup.
+2025-11-09T06:16:55.4809104Z INFO:     Application startup complete.
+2025-11-09T06:16:55.4969716Z INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2025-11-09T06:16:55.7009452Z Loading model workers...
+2025-11-09T06:16:55.7010198Z > Loading checkpoint '/home/site/wwwroot/MiniLM-L6-v2.ckpt'...
+2025-11-09T06:16:55.7010262Z > Loading checkpoint '/home/site/wwwroot/MiniLM-L6-v2.ckpt'...
+2025-11-09T06:16:55.7010287Z > Loading checkpoint '/home/site/wwwroot/MiniLM-L6-v2.ckpt'...
+2025-11-09T06:16:55.7010313Z > Loading checkpoint '/home/site/wwwroot/MiniLM-L6-v2.ckpt'...
+2025-11-09T06:16:55.7010336Z > All 4 workers initialized!
+2025-11-09T06:16:55.7010358Z Ready...
+2025-11-09T06:17:13.7843079Z INFO:     169.254.129.1:18611 - "GET /health HTTP/1.1" 200 OK
+```
+
+(***Old instructions***) Still valid but see above about creating a python virtual environment.
+
+***11/8/2025***
+
+This is the painful process. It might take a few attempts. The following steps worked for me.
+
+**Set Environment Variables:**
+
+```
+JWT_SECRET=<your_secret_key>
+```
+
+This one is probably not needed anymore.
+```
+SCM_DO_BUILD_DURING_DEPLOYMENT=true
+```
+
+**Upload Files:**
+
+Upload all the files using FTP/FTPS.
+
+**Deployment Center > FTPS Credentials**
+
+**Note:** You can enable plain FTP access temporarily and just upload the file from Windows Explorer. (*Settings > General settings > FTP State*)
+
+**SSH into the Azure App Service:**
+
+SSH into your Azure App Service instance using the Azure portal or an SSH client and install the required packages. This is going to take a while as some packages (**transfomers**)<sup>1</sup> have large dependencies and we reply on **torch** to run the inference.
+
+***11/8/2025***
+
+**Note:**<sup>1</sup> This dependecy will go away. We only need it for the tokenizer, but for now we have to install the whole package.
+
+```bash
+cd site/wwwroot
+pip install -r requirements.txt
+```
+
+Test the service. Run:
+
+```bash
+python -m uvicorn runserver:app --host 0.0.0.0 --port 8000
+```
+
+And navigate to the /health endpoint.
+
+**Startup Command**
+
+Do not enable the startup command until all the packages are installed or you will not be able to SSH into the machine due to startup failure.
+
+**Settings > Configuration > Stack settings > Startup command:**
+
+```bash
+python -m uvicorn runserver:app --host 0.0.0.0 --port 8000
+```
