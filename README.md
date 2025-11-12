@@ -1,8 +1,13 @@
-# MiniLM-L6-v2
+# embeddings.py
 
 ## Overview
 
-This repository provides a self-contained implementation of the [**all-MiniLM-L6-v2**](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) inference, designed for generating quality sentence embeddings.
+This repository provides self-contained implementations of a few popular embedding models.
+
+Specifically, it includes 
+
+- [**all-MiniLM-L6-v2**](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
+- [**all-MiniLM-L12-v2**](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2)
 
 The goal is to not rely on OpenAI or other third-party services due to cost, latency, privacy, and data security concerns.
 
@@ -148,8 +153,9 @@ JWT_SECRET=<your_secret_key>
 **Files to deploy:**
 
 - `modeling.py`
-- `MiniLM-L6-v2.py`
-- `MiniLM-L6-v2.ckpt`
+- `bert.py`
+- `all-MiniLM-L6-v2.py`
+- `all-MiniLM-L6-v2.ckpt`
 - `runserver.py`
 - `requirements.txt`
 

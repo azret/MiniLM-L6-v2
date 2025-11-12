@@ -4,7 +4,7 @@ from typing import Any, List, Optional, Union
 
 # The model being hosted by this node
 
-MODEL = os.getenv("MODEL", "MiniLM-L6-v2").strip()
+MODEL = os.getenv("MODEL", "all-MiniLM-L6-v2").strip()
 print(f"> MODEL={MODEL}")
 DEVICE = os.getenv("DEVICE", "auto").strip().lower()
 if DEVICE not in ["auto", "cpu", "cuda"]:
@@ -13,7 +13,7 @@ print(f"> DEVICE={DEVICE}")
 
 JWT_SECRET = os.getenv("APP_JWT_SECRET", "")
 if not JWT_SECRET or JWT_SECRET == len(""):
-    print("Environment variable 'JWT_SECRET' is not set.")
+    print("\r\nEnvironment variable 'JWT_SECRET' is not set.")
 JWT_ALG = os.getenv("APP_JWT_ALG", "HS256")
 JWT_ISS = os.getenv("APP_JWT_ISS", "")
 JWT_LEEWAY_SECONDS = int(os.getenv("APP_JWT_LEEWAY", "30"))
@@ -25,7 +25,7 @@ MAX_TEXT = 1024
 
 import torch
 
-def _load_from_check_point(
+def _load_model_by_name(
     name
 ) -> torch.nn.Module:
     import hashlib, importlib
@@ -52,11 +52,11 @@ def _load_from_check_point(
             md5_ = hashlib.md5()
         md5_.update(s.encode("utf-8"))
         return base48(int.from_bytes(md5_.digest()))
-    path = os.path.abspath(name + ".py").lower()
+    path = os.path.join(os.path.dirname(__file__), f"{name}.py")
     spec = importlib.util.spec_from_file_location(md5(name), path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    model, encoding = module._LOAD_MODEL_BY_NAME_(name)
+    model, encoding = module._load_model_by_name(name)
     model.eval()
     return model, encoding
 
@@ -120,7 +120,7 @@ class WorkerPool:
         self.workers = []
         self.queue = asyncio.Queue()
         for _id in range(num):
-            model, encoding = _load_from_check_point(MODEL)
+            model, encoding = _load_model_by_name(MODEL)
             if model is None or encoding is None:
                 print(f"> _load_from_check_point('{MODEL}') failed.", file=sys.stder)
             if device == "cuda":
@@ -205,7 +205,7 @@ r""" /v1/embeddings """
 class EmbeddingRequest(BaseModel):
     r""" Request body for embedding generation. """
     model: str
-    dim: Optional[int] = 384
+    dimensions: int = 384
     input: Union[str, List[str]] = []
     encoding_format: Optional[str] = "float"
     user: Optional[str] = None
@@ -239,10 +239,10 @@ async def embeddings(payload: EmbeddingRequest, principal: dict = Security(verif
         raise HTTPException(
             status_code=400,
             detail=f"The specified encoding format '{payload.encoding_format}' is not supported.")
-    if payload.dim != 384:
+    if payload.dimensions != 384:
         raise HTTPException(
             status_code=400,
-            detail=f"The specified dimension '{payload.dim}' is not supported.")
+            detail=f"The specified dimensions '{payload.dimensions}' are not supported.")
     if isinstance(payload.input, str):
         inputs = [payload.input]
     else:

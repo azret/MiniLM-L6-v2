@@ -6,7 +6,7 @@ from io import StringIO
 
 from typing import Callable, Optional, Literal, Union, Tuple, Iterator, Dict, List, Any
 
-def adamw(model, weight_decay=1e-2, lr=1e-3, betas=(0.9, 0.999)):
+def _adamw(model, weight_decay=1e-2, lr=1e-3, betas=(0.9, 0.999)):
     r""" Creates an AdamW optimizer with separate parameter groups for weight decay and no weight decay. """
     def is_weight_decay(name, param):
         return hasattr(param, 'WEIGHT_DECAY') and param.WEIGHT_DECAY
@@ -28,6 +28,29 @@ def adamw(model, weight_decay=1e-2, lr=1e-3, betas=(0.9, 0.999)):
         betas=betas
     )
     return AdamW
+
+def _cosine_decay_with_warmup(step: int, lr: float, warmup: float, train: int):
+    r"""
+    Computes learning rate with linear warmup followed by cosine decay.
+    """ 
+    if step < 0:
+        raise ValueError("Step must be non-negative.")
+    if lr <= 0:
+        raise ValueError("Invalid learning rate.")
+    if train < 0:
+        raise ValueError("Total steps must be positive.")
+    if warmup < 0:
+        raise ValueError("Warmup steps must be non-negative.")
+    if warmup < 1:
+        warmup = train * warmup # % of the total
+    warmup = int(warmup)
+    if step < warmup:
+        return lr * (step + 1) / (warmup + 1)
+    if step >= train:
+        return 1e-8
+    decay = min(max((step - warmup) / (train - warmup), 0.0), 1.0)
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay))
+    return 1e-8 + coeff * (lr - 1e-8)
 
 def rsqrt(x: numpy.ndarray, eps: float = 1e-6) -> numpy.ndarray:
     """
@@ -409,7 +432,7 @@ def _save_vocab(vocab: collections.OrderedDict, vocab_file) -> tuple[str]:
 
 # We save the model parameters in a raw binary file using MATLAB MAT4 format in Raw-Major.
 
-def _save_state(self: torch.nn.Module, ckpt):
+def _save_to_mat4(self: torch.nn.Module, ckpt):
     r""" Save model parameters to a raw binary file. (MATLAB MAT4 format in Raw-Major) """
     path = os.path.dirname(os.path.abspath(ckpt))
     os.makedirs(path, exist_ok=True)
@@ -433,7 +456,7 @@ def _save_state(self: torch.nn.Module, ckpt):
             file.write(name)
             file.write(t.numpy().tobytes())
 
-def _load_state(self: torch.nn.Module, ckpt, errors: Literal["strict"] = "strict"):
+def _load_from_mat4(self: torch.nn.Module, ckpt, errors: Literal["strict"] = "strict"):
     r""" Load model parameters from a raw binary file. (MATLAB MAT4 format in Raw-Major) """
     params = self.state_dict();
     with open(ckpt, "rb") as f:

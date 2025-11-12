@@ -1,19 +1,45 @@
-# This is a Karpathy-style single-model single-file implementation for BertModel.
-
 import math, os, sys, time
 
 import numpy, torch
 
 from modeling import _Model, MultiHeadSelfAttention, MLP
-from modeling import _save_state, _load_state
+from modeling import _save_to_mat4, _load_from_mat4
 from modeling import _strip_whitespaces, _save_vocab, _load_vocab
 
 from typing import Callable, Literal, Optional, Tuple, Union, List, Dict
 
 from dataclasses import dataclass
 
+WELL_KNOWN_MODELS = {
+    "all-MiniLM-L6-v2": {
+        "base": "sentence-transformers/all-MiniLM-L6-v2",
+        "dim": 384,
+        "multiplier": 4,
+        "heads": 12,
+        "depth": 6,
+        "seq_len": 512,
+        "vocab_size": 30522,
+        "type_vocab_size": 2,
+        "bias": True,
+        "eps": 1e-12
+        },
+    "all-MiniLM-L12-v2": {
+        "base": "sentence-transformers/all-MiniLM-L12-v2",
+        "dim": 384,
+        "multiplier": 4,
+        "heads": 12,
+        "depth": 12,
+        "seq_len": 512,
+        "vocab_size": 30522,
+        "type_vocab_size": 2,
+        "bias": True,
+        "eps": 1e-12
+        },
+}
+
 @dataclass
-class Config:
+class BertConfig:
+    base: str = ""
     dim: int = 384
     seq_len: int = 512
     vocab_size: int = 30522
@@ -23,11 +49,16 @@ class Config:
     depth: int = 6
     bias: bool = True
     eps: float = 1e-12
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
 
 class BertEncoding:
-    def __init__(self, vocab_or_file):
+    def __init__(self, model: str):
+        r""" Tokenizer for Bert-based models. """
         from transformers import BertTokenizer as _BertTokenizer
-        self.tokenizer = _BertTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+        self.tokenizer = _BertTokenizer.from_pretrained(WELL_KNOWN_MODELS[model]["base"])
     def __call__(self, text):
         encoded = self.tokenizer(
             text,
@@ -37,7 +68,7 @@ class BertEncoding:
         )
         return encoded
 
-class BertModel(_Model):
+class Bert(_Model):
     class BertAttention(torch.nn.Module):
         def __init__(
             self,
@@ -81,7 +112,7 @@ class BertModel(_Model):
             drop: float
         ):
             super().__init__()
-            self.attention = BertModel.BertAttention(
+            self.attention = Bert.BertAttention(
                 eps=eps,
                 dim=dim,
                 heads=heads,
@@ -106,7 +137,7 @@ class BertModel(_Model):
             y = self.norm(z + a)
             return y, w
 
-    def __init__(self, cfg: Config, dropout: float = 0.1):
+    def __init__(self, cfg: BertConfig, dropout: float = 0.1):
         super().__init__()
         assert cfg.dim >= 1 and cfg.dim <= 1024
         assert cfg.dim % cfg.heads == 0 and cfg.dim // cfg.heads > 0
@@ -128,7 +159,7 @@ class BertModel(_Model):
         self.encoder = torch.nn.ModuleDict(dict(
             layer = torch.nn.ModuleList(
                 [
-                    BertModel.BertLayer(
+                    Bert.BertLayer(
                         dim = cfg.dim,
                         eps = cfg.eps,
                         heads = cfg.heads,
@@ -168,151 +199,133 @@ class BertModel(_Model):
             x, _ = block(x, attention_mask)
         return x
 
-    @classmethod
-    def download_from_hugging_face(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = "sentence-transformers/all-MiniLM-L6-v2"):
-        """ Load model from pre-trained 'sentence-transformers/all-MiniLM-L6-v2'. """
-        print("> Downloading pre-trained 'sentence-transformers/all-MiniLM-L6-v2'...", end="")
-        try:
-            from transformers import BertModel as _BertModel, BertTokenizer as _BertTokenizer
-            stdout = sys.stdout
-            stderr = sys.stderr
-            with open(os.devnull, "w") as devnull:
-                sys.stdout = devnull
-                sys.stderr = devnull
-                try:
-                    hugging_face_model = _BertModel.from_pretrained(pretrained_model_name_or_path)
-                    cfg = Config()
-                    cfg.dim = 384
-                    cfg.multiplier = 4
-                    cfg.heads = 12
-                    cfg.depth = 6
-                    cfg.seq_len = 512
-                    cfg.vocab_size = 30522
-                    cfg.type_vocab_size = 2
-                    cfg.bias = True
-                    cfg.eps = 1e-12
-                    model = BertModel(cfg)
-                    model.apply(model._init_weights)
-                    cls._adopt_from_hugging_face(model, hugging_face_model)
-                    model.eval()
-                    return model
-                finally:
-                    sys.stdout = stdout
-                    sys.stderr = stderr
-        finally:
-            print("\n", end="")
+def _adopt_from_hugging_face(dst, src):
+    r""" Adopts parameters from HuggingFace. """
+    dst_parameters = dst.state_dict()
+    src_parameters = src.state_dict()
+    for src_k in list(src_parameters.keys()):
+        dst_k = None
+        if src_k == 'embeddings.word_embeddings.weight':
+            dst_k = 'wte'
+        elif src_k == 'embeddings.position_embeddings.weight':
+            dst_k = 'wpe'
+        elif src_k == 'embeddings.token_type_embeddings.weight':
+            dst_k = 'tte'
+        elif src_k == 'embeddings.LayerNorm.weight':
+            dst_k = 'norm.weight'
+        elif src_k == 'embeddings.LayerNorm.bias':
+            dst_k = 'norm.bias'
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.query.weight"):
+            dst_k = src_k.replace(".attention.self.query.weight", ".attention.attention.wq.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.query.bias"):
+            dst_k = src_k.replace(".attention.self.query.bias", ".attention.attention.wq.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.key.weight"):
+            dst_k = src_k.replace(".attention.self.key.weight", ".attention.attention.wk.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.key.bias"):
+            dst_k = src_k.replace(".attention.self.key.bias", ".attention.attention.wk.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.value.weight"):
+            dst_k = src_k.replace(".attention.self.value.weight", ".attention.attention.wv.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.value.bias"):
+            dst_k = src_k.replace(".attention.self.value.bias", ".attention.attention.wv.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.dense.weight"):
+            dst_k = src_k.replace(".attention.output.dense.weight", ".attention.attention.wo.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.dense.bias"):
+            dst_k = src_k.replace(".attention.output.dense.bias", ".attention.attention.wo.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.LayerNorm.weight"):
+            dst_k = src_k.replace(".attention.output.LayerNorm.weight", ".attention.norm.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.LayerNorm.bias"):
+            dst_k = src_k.replace(".attention.output.LayerNorm.bias", ".attention.norm.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".intermediate.dense.weight"):
+            dst_k = src_k.replace(".intermediate.dense.weight", ".mlp.hidden.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".intermediate.dense.bias"):
+            dst_k = src_k.replace(".intermediate.dense.bias", ".mlp.hidden.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.dense.weight"):
+            dst_k = src_k.replace(".output.dense.weight", ".mlp.proj.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.dense.bias"):
+            dst_k = src_k.replace(".output.dense.bias", ".mlp.proj.bias")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.LayerNorm.weight"):
+            dst_k = src_k.replace(".output.LayerNorm.weight", ".norm.weight")
+        elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.LayerNorm.bias"):
+            dst_k = src_k.replace(".output.LayerNorm.bias", ".norm.bias")
+        if dst_k is None:
+            if src_k == "pooler.dense.weight" or src_k == "pooler.dense.bias":
+                continue
+            raise ValueError(f"Unrecognized Hugging Face parameter key: {src_k}")
+        if dst_k not in dst_parameters:
+            raise ValueError(f"Local model missing parameter key: {dst_k}")
+        assert src_parameters[src_k].shape == dst_parameters[dst_k].shape, \
+            f"Shape mismatch for {src_k} -> {dst_k}: {src_parameters[src_k].shape} != {dst_parameters[dst_k].shape}"
+        with torch.no_grad():
+            dst_parameters[dst_k].copy_(src_parameters[src_k])
 
-    @staticmethod
-    def _adopt_from_hugging_face(dst, src):
-        """ Adopt parameters from Hugging Face model to local model. """
-        dst_parameters = dst.state_dict()
-        src_parameters = src.state_dict()
-        for src_k in list(src_parameters.keys()):
-            dst_k = None
-            if src_k == 'embeddings.word_embeddings.weight':
-                dst_k = 'wte'
-            elif src_k == 'embeddings.position_embeddings.weight':
-                dst_k = 'wpe'
-            elif src_k == 'embeddings.token_type_embeddings.weight':
-                dst_k = 'tte'
-            elif src_k == 'embeddings.LayerNorm.weight':
-                dst_k = 'norm.weight'
-            elif src_k == 'embeddings.LayerNorm.bias':
-                dst_k = 'norm.bias'
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.query.weight"):
-                dst_k = src_k.replace(".attention.self.query.weight", ".attention.attention.wq.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.query.bias"):
-                dst_k = src_k.replace(".attention.self.query.bias", ".attention.attention.wq.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.key.weight"):
-                dst_k = src_k.replace(".attention.self.key.weight", ".attention.attention.wk.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.key.bias"):
-                dst_k = src_k.replace(".attention.self.key.bias", ".attention.attention.wk.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.value.weight"):
-                dst_k = src_k.replace(".attention.self.value.weight", ".attention.attention.wv.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.self.value.bias"):
-                dst_k = src_k.replace(".attention.self.value.bias", ".attention.attention.wv.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.dense.weight"):
-                dst_k = src_k.replace(".attention.output.dense.weight", ".attention.attention.wo.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.dense.bias"):
-                dst_k = src_k.replace(".attention.output.dense.bias", ".attention.attention.wo.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.LayerNorm.weight"):
-                dst_k = src_k.replace(".attention.output.LayerNorm.weight", ".attention.norm.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".attention.output.LayerNorm.bias"):
-                dst_k = src_k.replace(".attention.output.LayerNorm.bias", ".attention.norm.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".intermediate.dense.weight"):
-                dst_k = src_k.replace(".intermediate.dense.weight", ".mlp.hidden.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".intermediate.dense.bias"):
-                dst_k = src_k.replace(".intermediate.dense.bias", ".mlp.hidden.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.dense.weight"):
-                dst_k = src_k.replace(".output.dense.weight", ".mlp.proj.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.dense.bias"):
-                dst_k = src_k.replace(".output.dense.bias", ".mlp.proj.bias")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.LayerNorm.weight"):
-                dst_k = src_k.replace(".output.LayerNorm.weight", ".norm.weight")
-            elif src_k.startswith("encoder.layer.") and src_k.endswith(".output.LayerNorm.bias"):
-                dst_k = src_k.replace(".output.LayerNorm.bias", ".norm.bias")
-            if dst_k is None:
-                if src_k == "pooler.dense.weight" or src_k == "pooler.dense.bias":
-                    continue
-                raise ValueError(f"Unrecognized Hugging Face parameter key: {src_k}")
-            if dst_k not in dst_parameters:
-                raise ValueError(f"Local model missing parameter key: {dst_k}")
-            assert src_parameters[src_k].shape == dst_parameters[dst_k].shape, \
-                f"Shape mismatch for {src_k} -> {dst_k}: {src_parameters[src_k].shape} != {dst_parameters[dst_k].shape}"
-            with torch.no_grad():
-                dst_parameters[dst_k].copy_(src_parameters[src_k])
+def _download_from_hugging_face(model: str):
+    r""" Download pre-trained model from HuggingFace and adopt the parameters. """
+    assert model in WELL_KNOWN_MODELS
+    print(f"> Downloading pre-trained '{WELL_KNOWN_MODELS[model]}'...", end="")
+    try:
+        from transformers import BertModel as _BertModel, BertTokenizer as _BertTokenizer
+        stdout = sys.stdout
+        stderr = sys.stderr
+        with open(os.devnull, "w") as devnull:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            try:
+                hugging_face_model = _BertModel.from_pretrained(WELL_KNOWN_MODELS[model]["base"])
+                cfg = BertConfig()
+                cfg.dim = hugging_face_model.config.hidden_size
+                cfg.multiplier = hugging_face_model.config.intermediate_size // hugging_face_model.config.hidden_size
+                assert cfg.multiplier * cfg.dim == hugging_face_model.config.intermediate_size
+                cfg.heads = hugging_face_model.config.num_attention_heads
+                cfg.depth = hugging_face_model.config.num_hidden_layers
+                cfg.seq_len = hugging_face_model.config.max_position_embeddings
+                cfg.vocab_size = hugging_face_model.config.vocab_size
+                cfg.type_vocab_size = hugging_face_model.config.type_vocab_size
+                cfg.bias = True # always true
+                cfg.eps = hugging_face_model.config.layer_norm_eps
+                assert hugging_face_model.config.hidden_act == "gelu"
+                assert hugging_face_model.config.position_embedding_type == "absolute"
+                assert hugging_face_model.config.model_type == "bert"
+                assert WELL_KNOWN_MODELS[model]["dim"] == cfg.dim
+                assert WELL_KNOWN_MODELS[model]["multiplier"] == cfg.multiplier
+                assert WELL_KNOWN_MODELS[model]["heads"] == cfg.heads
+                assert WELL_KNOWN_MODELS[model]["depth"] == cfg.depth
+                assert WELL_KNOWN_MODELS[model]["seq_len"] == cfg.seq_len
+                assert WELL_KNOWN_MODELS[model]["vocab_size"] == cfg.vocab_size
+                assert WELL_KNOWN_MODELS[model]["type_vocab_size"] == cfg.type_vocab_size
+                model = Bert(cfg)
+                model.apply(model._init_weights)
+                _adopt_from_hugging_face(model, hugging_face_model)
+                model.eval()
+                return model
+            finally:
+                sys.stdout = stdout
+                sys.stderr = stderr
+    finally:
+        print("\n", end="")
 
-    @classmethod
-    def load_from_checkpoint(cls, ckpt: Union[str, os.PathLike], pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = "sentence-transformers/all-MiniLM-L6-v2"):
-        """ Load model from local checkpoint. """
-        print(f"> Loading checkpoint '{ckpt}'...", end="")
-        try:
-            stdout = sys.stdout
-            stderr = sys.stderr
-            with open(os.devnull, "w") as devnull:
-                sys.stdout = devnull
-                sys.stderr = devnull
-                try:
-                    cfg = Config()
-                    cfg.dim = 384
-                    cfg.multiplier = 4
-                    cfg.heads = 12
-                    cfg.depth = 6
-                    cfg.seq_len = 512
-                    cfg.vocab_size = 30522
-                    cfg.type_vocab_size = 2
-                    cfg.bias = True
-                    cfg.eps = 1e-12
-                    model = BertModel(cfg)
-                    model.apply(model._init_weights)
-                    _load_state(
-                        model,
-                        ckpt)
-                    model.eval()
-                    return model
-                finally:
-                    sys.stdout = stdout
-                    sys.stderr = stderr
-        finally:
-            print("\n", end="")
-
-def _LOAD_MODEL_BY_NAME_(name, download: bool | None = None):
-    r""" Factory """
-    assert name == 'MiniLM-L6-v2'
+def _load_model_by_name(model, path, download: bool | None = None):
     from pathlib import Path
-    ckpt = str(Path(__file__).with_suffix(".ckpt"))
+    ckpt = os.path.join(path, f"{model}.ckpt")
     if not os.path.exists(ckpt) and download:
-        model = BertModel.download_from_hugging_face()
-        _save_state(
-            model,
-            ckpt)
+        _save_to_mat4(
+            _download_from_hugging_face(model),
+            ckpt
+        )
     if not os.path.exists(ckpt):
         return None, None
-    model = BertModel.load_from_checkpoint(ckpt)
-    encoding = BertEncoding(None)
+    encoding = BertEncoding(model)
+    cfg = BertConfig(**WELL_KNOWN_MODELS[model])
+    model = Bert(cfg)
+    model.apply(model._init_weights)
+    _load_from_mat4(
+        model,
+        ckpt
+    )
+    model.eval()
     return model, encoding
 
 if __name__ == "__main__":
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     sentences = [
         "The quick brown fox jumps over the lazy dog.",
         "FastAPI is handling this request on Azure right now.",
@@ -350,11 +363,12 @@ if __name__ == "__main__":
     print(f"> numpy = {numpy.version.version}")
     print(f"> torch = {torch.version.__version__}")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default='MiniLM-L6-v2')
+    parser.add_argument("--model", type=str, default='all-MiniLM-L6-v2')
     parser.add_argument("--device", type=str, default="auto")
     args, _ = parser.parse_known_args()
     assert args.model in [
-        'MiniLM-L6-v2'
+        'all-MiniLM-L6-v2',
+        'all-MiniLM-L12-v2'
     ]
     if args.device == "auto":
         args.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -368,12 +382,15 @@ if __name__ == "__main__":
             torch.cuda.manual_seed(65537)
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
-        model, encoding =  _LOAD_MODEL_BY_NAME_(args.model, download=True)
+        model, encoding =  _load_model_by_name(
+            args.model,
+            os.path.dirname(__file__),
+            download=True)
         if model is None or encoding is None:
             raise ValueError(f"Model '{args.model}' is not available.")
         model.to(args.device)
         assert model.training is False
-        print(f"\x1b[38;2;{114};{204};{232}m", end="")
+        print(f"\x1b[38;2;{114};{204};{232}m")
         print(str(model))
         print(f"\x1b[0m", end="")
         def _calc_num_params(model):
@@ -391,14 +408,14 @@ if __name__ == "__main__":
                 token_type_ids = encoded.data['token_type_ids'],
                 attention_mask = encoded.data['attention_mask']
             )
-            def mean_pooling(token_embeddings, attention_mask):
-                token_embeddings = token_embeddings.cpu()
-                mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-                return (token_embeddings * mask_expanded).sum(1) / mask_expanded.sum(1)
+            def mean_pooling(embeddings, attention_mask):
+                input_mask_expanded = attention_mask.unsqueeze(-1).expand(embeddings.size()).float()
+                input_mask_expanded = input_mask_expanded.to(device=embeddings.device)
+                return torch.sum(embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
             sentence_embeddings0 = mean_pooling(token_embeddings, encoded['attention_mask'])
             sentence_embeddings0 = torch.nn.functional.normalize(sentence_embeddings0, p=2, dim=1)
         from sentence_transformers import SentenceTransformer
-        _SentenceTransformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        _SentenceTransformer = SentenceTransformer(WELL_KNOWN_MODELS[args.model]["base"])
         sentence_embeddings1 = _SentenceTransformer.encode(sentences)
         assert sentence_embeddings0.shape == sentence_embeddings1.shape
         assert numpy.allclose(
@@ -406,7 +423,7 @@ if __name__ == "__main__":
             sentence_embeddings1,
             atol=1e-5
         )
-        print()
+        print("Success...")
     except Exception as e:
         print()
         print(f"\x1b[38;2;{243};{0};{0}mERROR:\x1b[0m ", end="")
