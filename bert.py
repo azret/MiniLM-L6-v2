@@ -423,7 +423,7 @@ if __name__ == "__main__":
             sentence_embeddings1,
             atol=1e-5
         )
-        print("Success...")
+        print("Success...\n")
     except Exception as e:
         print()
         print(f"\x1b[38;2;{243};{0};{0}mERROR:\x1b[0m ", end="")

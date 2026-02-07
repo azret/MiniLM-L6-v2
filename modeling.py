@@ -432,11 +432,11 @@ def _save_vocab(vocab: collections.OrderedDict, vocab_file) -> tuple[str]:
 
 # We save the model parameters in a raw binary file using MATLAB MAT4 format in Raw-Major.
 
-def _save_to_mat4(self: torch.nn.Module, ckpt):
+def _save_to_mat4(model: torch.nn.Module, ckpt):
     r""" Save model parameters to a raw binary file. (MATLAB MAT4 format in Raw-Major) """
     path = os.path.dirname(os.path.abspath(ckpt))
     os.makedirs(path, exist_ok=True)
-    params = self.state_dict();
+    params = model.state_dict();
     with open(ckpt, "wb") as file:
         for k in params:
             t = params[k].detach().float().cpu()
@@ -456,9 +456,9 @@ def _save_to_mat4(self: torch.nn.Module, ckpt):
             file.write(name)
             file.write(t.numpy().tobytes())
 
-def _load_from_mat4(self: torch.nn.Module, ckpt, errors: Literal["strict"] = "strict"):
+def _load_from_mat4(model: torch.nn.Module, ckpt, errors: Literal["strict"] = "strict"):
     r""" Load model parameters from a raw binary file. (MATLAB MAT4 format in Raw-Major) """
-    params = self.state_dict();
+    params = model.state_dict();
     with open(ckpt, "rb") as f:
         for k in params:
             header = numpy.frombuffer(f.read(5 * 4), dtype=numpy.int32)

@@ -8,6 +8,8 @@ import numpy, torch, tiktoken
 
 from modeling import _Model, MultiHeadSelfAttentionBlock
 
+from modeling import _save_to_mat4, _load_from_mat4
+
 from typing import Literal, Optional, Tuple, Union
 
 from dataclasses import dataclass
@@ -93,7 +95,7 @@ class GPT(_Model):
             loss = None
         return logits, loss
 
-def _download_from_hugging_face(out_ckpt):
+def _download_from_hugging_face(ckpt):
     print("> Downloading a pre-trained model from: 'https://huggingface.co/openai-community/gpt2'...", end="")
     try:
         encoding = tiktoken.get_encoding("gpt2")
@@ -120,8 +122,8 @@ def _download_from_hugging_face(out_ckpt):
                 model.apply(model._init_weights)
                 _adopt_from_hugging_face(model, hugging_face_model)
                 del hugging_face_model
-                if out_ckpt is not None:
-                    model.save(out_ckpt)
+                if ckpt is not None:
+                    _save_to_mat4(model, ckpt)
                 model.eval()
                 return model, encoding
             finally:
@@ -146,7 +148,7 @@ def _adopt_from_hugging_face(model, hugging_face_model):
         k = k.replace("mlp.c_proj", "mlp.proj")
         k = k.replace("ln_f", "norm")
         k = k.replace("lm_head", "head")
-        k = k.replace(".ln_1", ".att.pre")
+        k = k.replace(".ln_1", ".att.norm")
         k = k.replace(".ln_2", ".mlp.norm")
         if _hf_k == 'transformer.wte.weight':
             k = 'wte'
@@ -163,8 +165,8 @@ def _adopt_from_hugging_face(model, hugging_face_model):
             with torch.no_grad():
                 parameters[k].copy_(hugging_face_parameters[_hf_k])
 
-def _load_from_check_point(device: str, in_ckpt):
-    print("> Loading a pre-trained model from: '%s'..." % in_ckpt, end="")
+def _load_from_check_point(device: str, ckpt):
+    print("> Loading a pre-trained model from: '%s'..." % ckpt, end="")
     try:
         encoding = tiktoken.get_encoding("gpt2")
         cfg = Config()
@@ -178,7 +180,10 @@ def _load_from_check_point(device: str, in_ckpt):
         cfg.norm = "layernorm"
         cfg.eps = 1e-5
         model = GPT(cfg)
-        model.load(in_ckpt)
+        _load_from_mat4(
+            model,
+            ckpt
+        )
         model.to(device = device, dtype=torch.float32)
         model.eval()
         return model, encoding
@@ -302,11 +307,9 @@ if __name__ == "__main__":
             torch.cuda.reset_peak_memory_stats()
 
         ckpt = os.path.join(os.path.dirname(__file__), "GPT.ckpt")
-
         if not os.path.exists(ckpt):
-           _download_from_hugging_face(out_ckpt=ckpt)
-
-        model, encoding = _load_from_check_point(args.device, in_ckpt=ckpt)
+           _download_from_hugging_face(ckpt=ckpt)
+        model, encoding = _load_from_check_point(args.device, ckpt=ckpt)
 
         print(f"\x1b[38;2;{114};{204};{232}m", end="")
         print(str(model))
